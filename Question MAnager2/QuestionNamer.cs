@@ -25,6 +25,7 @@ namespace Points_submit
 
         public void Save()
         {
+            File.Delete(Path);
             xml.Serialize(File.OpenWrite(Path), list);
         }
     }

@@ -12,42 +12,86 @@ using System.Windows.Forms;
 
 namespace Question_MAnager2
 {
-    public partial class GetItem : Form
+    public partial class LessonView : Form
     {
         public string item;
-        public GetItem(IEnumerable<string> items,string cap)
+        public LessonView(QuestionCategory category, MainLogic logic)
         {
             InitializeComponent();
-            Text = cap;
-            item = "";
-                foreach (var item in items)
-                {
-                    listOfGuids.Items.Add(item);
-                }
-          
+            Category = category;
+            Logic = logic;
+            ReloadList();
         }
 
-        public QuestionNamer Namer { get; }
+        public QuestionCategory Category { get; }
+        public MainLogic Logic { get; }
 
-        private void btnOk_Click(object sender, EventArgs e)
+        private void ReloadList()
         {
-            try
+            Questionslist.Items.Clear();
+            foreach (var item in Category.SubQuestionsGuids)
             {
-                if (Namer != null)
-                {
-                    var name = listOfGuids.SelectedItems[0].Text;
-                    item = Namer.list.Find(s => s.val == name).guid;
-                }
-                else
-                {
-                    item = listOfGuids.SelectedItems[0].Text;
-                }
+                var categoryToShow = new ListViewItem();
+                categoryToShow.Text = Logic.namer.list.Find(s => s.guid == item).val;
+                categoryToShow.Tag = Logic.manager.questions.Find(s => s.UniqueGuid == item);
+                Questionslist.Items.Add(categoryToShow);
+            }
+        }
+        private Question getSelection()
+        {
+            if (Questionslist.SelectedItems.Count == 1)
+            {
+                return (Question)Questionslist.SelectedItems[0].Tag;
+            }
+            return null;
+        }
+        private void AddQuestion(object sender, EventArgs e)
+        {
+            Logic.AddQuestion(Category);
+            ReloadList();
+        }
 
-            }
-            catch (Exception)
+        private void RemoveQuestion(object sender, EventArgs e)
+        {
+            var category = getSelection();
+            if (category is null)
             {
+                return;
             }
-            Close();
+            Logic.RemoveQuestion(category,Category);
+            ReloadList();
+        }
+
+        private void ExportQuestion(object sender, EventArgs e)
+        {
+            var category = getSelection();
+            if (category is null)
+            {
+                return;
+            }
+            Logic.ExportQuestion(category);
+        }
+
+        private void EditQuestion(object sender, EventArgs e)
+        {
+            var category = getSelection();
+            if (category is null)
+            {
+                return;
+            }
+            Logic.EditQuestion(category);
+        }
+
+        private void button5_Click(object sender, EventArgs e)
+        {
+            var category = getSelection();
+            if (category is null)
+            {
+                return;
+            }
+
+            Logic.Rename(category);
+            ReloadList();
         }
     }
 }

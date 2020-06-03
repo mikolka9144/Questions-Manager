@@ -1,5 +1,6 @@
 ﻿using PixBlocks.DataModels.Questions;
 using PixBlocks.Tools.StringCompressor;
+using Question_MAnager2;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -10,35 +11,47 @@ namespace Points_submit
 {
     public class MainLogic
     {
-        public MainLogic(UIRef ui, List<Question> questions, List<QuestionCategory> categories, Translations translations,QuestionNamer namer)
+        public MainLogic(IUIRef ui, Translations translations,QuestionNamer namer,BinaryManager manager)
         {
             Ui = ui;
-            this.questions = questions;
-            this.categories = categories;
             this.translations = translations;
             this.namer = namer;
-            custom = categories.Find(s => s.CategoryUserFriendlyName == "custom");
+            this.manager = manager;
+
+            if (!manager.categories.Any(s => s.CategoryUserFriendlyName == "custom"))
+            {
+                Ui.message("Konfiguracja programu");
+                var core = new QuestionCategory();
+                core.CategoryUserFriendlyName = "custom";
+                core.UniquePath = "\\custom";
+                translations.LessonDesc.Add("\\custom\tPytania Niestandartowe\tCustom Tasks\tНестандартные вопросы");
+                manager.categories[0].SubcategoriesUniquePaths.Add("\\custom");
+                manager.categories.Add(core);
+                SaveAll();
+            }
+
+            custom = manager.categories.Find(s => s.CategoryUserFriendlyName == "custom");
         }
+
         Translations translations;
-        private readonly QuestionNamer namer;
+        public readonly QuestionNamer namer;
+        public readonly BinaryManager manager;
         private QuestionCategory custom;
-        private List<QuestionCategory> customs { 
+
+        public List<QuestionCategory> customs { 
             get
             {
                 var list = new List<QuestionCategory>();
                 foreach (var item in custom.SubcategoriesUniquePaths)
                 {
                    
-                    list.Add(categories.Find(s => s.UniquePath == item));
+                    list.Add(manager.categories.Find(s => s.UniquePath == item));
                 }
-                list.Remove(list.Find(s => s.UniquePath == "\\custom\\"));
                 return list;
             }
         }
-        private List<Question> questions;
-        private List<QuestionCategory> categories;
 
-        public UIRef Ui { get; }
+        IUIRef Ui { get; }
 
         public void CreateNewLesson()
         {
@@ -46,34 +59,39 @@ namespace Points_submit
             category.CategoryUserFriendlyName = Ui.GetName("Wpisz nazwę lekcji");
             category.UniquePath = $"\\custom\\{category.CategoryUserFriendlyName}";
             custom.SubcategoriesUniquePaths.Add($"\\custom\\{category.CategoryUserFriendlyName}");
-            categories.Add(category);
+            manager.categories.Add(category);
             translations.AddLessonDesc(category.CategoryUserFriendlyName);
         }
         private Question LoadQuestion()
         {
             try
             {
-                return (Question)new XmlSerializer(typeof(Question)).Deserialize(File.OpenRead(Ui.SelectFile()));
+                return (Question)new XmlSerializer(typeof(Question)).Deserialize(File.OpenRead(Ui.SelectFile("Pytanie|*.question")));
 
             }
-            catch (Exception)
+            catch (Exception x)
             {
                 return null;
             }
         }
-        public void AddQuestion()
+
+        public void Rename(Question question)
         {
-            QuestionCategory category;
-            var questionToLoad = LoadQuestion();
-            if (questionToLoad is null)
+            var NewName = Ui.GetName("Podaj nową nazwę pytania");
+            if (NewName is null)
             {
                 return;
             }
-            category = Ui.GetLesson(customs);
+            namer.list.RemoveAll(s => s.guid == question.UniqueGuid);
+            namer.list.Add((question.UniqueGuid, NewName));
 
-            if (category is null)
+        }
+
+        public void AddQuestion(QuestionCategory category)
+        {
+            var questionToLoad = LoadQuestion();
+            if (questionToLoad is null)
             {
-                Ui.message("Brak lekcji");
                 return;
             }
             var name = Ui.GetName("Podaj nazwę pytania");
@@ -84,7 +102,7 @@ namespace Points_submit
 
             namer.list.Add((guid.ToString(), name));
 
-            questions.Add(questionToLoad);
+            manager.questions.Add(questionToLoad);
             translations.AddQuestionDesc(guid.ToString(), questionToLoad.Description);
             
         }
@@ -93,59 +111,49 @@ namespace Points_submit
 
         public void SaveAll()
         {
-            BinarySerializer.Serialize(AppDomain.CurrentDomain.BaseDirectory + "_Data\\categories.bin", categories);
-            BinarySerializer.Serialize(AppDomain.CurrentDomain.BaseDirectory + "_Data\\questions.bin", questions);
+            manager.Save();
             translations.Save();
             namer.Save();
         }
-        public void ExportQuestion()
+        public void ExportQuestion(Question question)
         {
-            var category = Ui.GetCategory(customs);
-            if (category is null)
-            {
-                return;
-            }
-            var ID = Ui.GetID(category);
-            if (category.SubQuestionsGuids.Exists(s => s == ID))
-            {
-                new XmlSerializer(typeof(Question)).Serialize
-                    (File.Create(AppDomain.CurrentDomain.BaseDirectory +$"{ID}.question")
-                    ,questions.Find(s => s.UniqueGuid == ID));
-                Ui.message("Export Ukończony");
-                return;
-            }
-            Ui.message("Brak Pytania");
+            var fileName = AppDomain.CurrentDomain.BaseDirectory + $"{namer.list.Find(s => s.guid == question.UniqueGuid).val}.question";
+            new XmlSerializer(typeof(Question)).Serialize(File.Create(fileName),question);
+            Ui.message("Export Ukończony");
         }
 
-        public void ExportCategory()
+        public void ExportCategory(QuestionCategory categoryPix)
         {
             var category = new Category();
-            category.category = Ui.GetCategory(customs);
+            category.category = categoryPix;
             category.questions = new List<(Question,string)>(5);
-            foreach (var item in category.category.SubQuestionsGuids)
+
+            var filename = AppDomain.CurrentDomain.BaseDirectory + $"{categoryPix.CategoryUserFriendlyName}.category";
+
+            foreach (var item in categoryPix.SubQuestionsGuids)
             {
                 category.questions.Add(
-                    (questions.Find(s => s.UniqueGuid == item),
+                    (manager.questions.Find(s => s.UniqueGuid == item),
                     namer.list.Find((s) =>s.guid == item).val));
             }
-            BinarySerializer.Serialize(AppDomain.CurrentDomain.BaseDirectory + $"{category.category.CategoryUserFriendlyName}.category",category);
+            BinarySerializer.Serialize(filename,category);
             Ui.message("Export Ukończony");
         }
 
         public void ImportLesson()
         {
-            var file = Ui.SelectFile();
+            var file = Ui.SelectFile("kategoria|*.category");
             if (!File.Exists(file))
             {
                 return;
             }
             var category = (Category)BinarySerializer.Deserialize(file);
-            categories.Add(category.category);
+            manager.categories.Add(category.category);
             custom.SubcategoriesUniquePaths.Add(category.category.UniquePath);
 
             foreach (var item in category.questions)
             {
-                questions.Add(item.Item1);
+                manager.questions.Add(item.Item1);
                 namer.list.Add((item.Item1.UniqueGuid, item.Item2));
                 translations.AddQuestionDesc(item.Item1.UniqueGuid, item.Item1.Description);
             }
@@ -154,77 +162,47 @@ namespace Points_submit
             Ui.message("Dodano lekcję");
         }
 
-        public void RemoveLesson()
+        public void RemoveLesson(QuestionCategory category)
         {
-            var category = Ui.GetCategory(customs);
-            if (category is null)
-            {
-                return;
-            }
             foreach (var item in category.SubQuestionsGuids)
             {
-                questions.Remove(questions.Find(s => s.UniqueGuid == item));
+                manager.questions.Remove(manager.questions.Find(s => s.UniqueGuid == item));
                 namer.list.Remove(namer.list.Find(s => s.guid == item));
                 translations.RemoveQuestionDesc(item);
             }
-            categories.Remove(category);
+            manager.categories.Remove(category);
             custom.SubcategoriesUniquePaths.Remove($"\\custom\\{category.CategoryUserFriendlyName}");
             translations.RemoveLessonDesc(category.CategoryUserFriendlyName);
-            Ui.message("Usunięto kategorie");
         }
 
-        public void EditQuestion()
+        public void EditQuestion(Question question)
         {
-            var category = Ui.GetCategory(customs);
-            if (category is null)
-            {
-                return;
-            }
-            var ID = Ui.GetID(category);
-
             var questionToLoad = LoadQuestion();
             if (questionToLoad is null)
             {
                 return;
             }          
 
-            if (category.SubQuestionsGuids.Exists(s => s == ID))
-            {
-                var oldQuestion = questions.Find(s => s.UniqueGuid == ID);
-                questions.Remove(oldQuestion);
-                questionToLoad.UniqueGuid = oldQuestion.UniqueGuid;
-                questionToLoad.UserFriendlyName = oldQuestion.UserFriendlyName;
-                questions.Add(questionToLoad);
-                translations.RemoveQuestionDesc(oldQuestion.UniqueGuid);
-                translations.AddQuestionDesc(oldQuestion.UniqueGuid, questionToLoad.Description);
-                Ui.message("Edytowano pytanie");
-            }
-            else
-            {
-                Ui.message("Brak pytania");
-            }
+            manager.questions.Remove(question);
+            questionToLoad.UniqueGuid = question.UniqueGuid;
+            questionToLoad.UserFriendlyName = question.UserFriendlyName;
+
+            manager.questions.Add(questionToLoad);
+
+            translations.RemoveQuestionDesc(question.UniqueGuid);
+            translations.AddQuestionDesc(question.UniqueGuid, questionToLoad.Description);
+
+            Ui.message("Edytowano pytanie");
         }
 
-        public void RemoveQuestion()
+        public void RemoveQuestion(Question question,QuestionCategory category)
         {
-            var category = Ui.GetCategory(customs);
-            if (category is null)
-            {
-                return;
-            }
-            var ID = Ui.GetID(category);
-            if (category.SubQuestionsGuids.Exists(s => s == ID))
-            {
-                category.SubQuestionsGuids.Remove(ID);
-                questions.Remove(questions.Find(s => s.UniqueGuid == ID));
-                namer.list.Remove(namer.list.Find(s => s.guid == ID));
-                translations.RemoveQuestionDesc(ID);
-                Ui.message("Usunieto pytane");
-            }
-            else
-            {
-                Ui.message("Brak pytania");
-            }
+                category.SubQuestionsGuids.Remove(question.UniqueGuid);
+                manager.questions.Remove(question);
+                namer.list.Remove(namer.list.Find(s => s.guid == question.UniqueGuid));
+                translations.RemoveQuestionDesc(question.UniqueGuid);
+            
+
         }        
     }
 }

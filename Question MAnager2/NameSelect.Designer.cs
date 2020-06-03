@@ -48,7 +48,6 @@
             this.textBox.Name = "textBox";
             this.textBox.Size = new System.Drawing.Size(190, 20);
             this.textBox.TabIndex = 1;
-            this.textBox.Text = " ";
             // 
             // NameSelect
             // 

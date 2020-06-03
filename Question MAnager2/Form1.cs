@@ -1,4 +1,5 @@
-﻿using Points_submit;
+﻿using PixBlocks.DataModels.Questions;
+using Points_submit;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -17,97 +18,77 @@ namespace Question_MAnager2
         {
             InitializeComponent();
             Logic = logic;
+            ReloadList();
         }
 
         public MainLogic Logic { get; }
 
-        private void AddQuestion(object sender, EventArgs e)
+        private void ReloadList()
         {
-            Lock();
-            Logic.AddQuestion();
-            Unlock();
+            Categorieslist.Items.Clear();
+            foreach (var item in Logic.customs)
+            {
+                var categoryToShow = new ListViewItem();
+                categoryToShow.Text = item.CategoryUserFriendlyName;
+                categoryToShow.Tag = item;
+                Categorieslist.Items.Add(categoryToShow);
+            }
         }
-
-        private void Lock()
+        private QuestionCategory getSelection()
         {
-            button1.Enabled = false;
-            button2.Enabled = false;
-            button3.Enabled = false;
-            button4.Enabled = false;
-            button5.Enabled = false;
-            button6.Enabled = false;
-            button7.Enabled = false;
-            button8.Enabled = false;
-            button9.Enabled = false;
+            if (Categorieslist.SelectedItems.Count == 1)
+            {
+                return (QuestionCategory)Categorieslist.SelectedItems[0].Tag;
+            }
+            return null;
         }
-
-        private void Unlock()
-        {
-            button1.Enabled = true;
-            button2.Enabled = true;
-            button3.Enabled = true;
-            button4.Enabled = true;
-            button5.Enabled = true;
-            button6.Enabled = true;
-            button7.Enabled = true;
-            button8.Enabled = true;
-            button9.Enabled = true;
-        }
-
-        private void RemoveQuestion(object sender, EventArgs e)
-        {
-            Lock();
-            Logic.RemoveQuestion();
-            Unlock();
-        }
-
-        private void EditQuestion(object sender, EventArgs e)
-        {
-            Lock();
-            Logic.EditQuestion();
-            Unlock();
-        }
-
-        private void ExportQuestion(object sender, EventArgs e)
-        {
-            Lock();
-            Logic.ExportQuestion();
-            Unlock();
-        }
-
         private void RemoveCategory(object sender, EventArgs e)
         {
-            Lock();
-            Logic.RemoveLesson();
-            Unlock();
+            var category = getSelection();
+            if (category is null)
+            {
+                return;
+            }
+            Logic.RemoveLesson(category);
+            ReloadList();
         }
 
         private void ExportCategory(object sender, EventArgs e)
         {
-            Lock();
-            Logic.ExportCategory();
-            Unlock();
+            var category = getSelection();
+            if (category is null)
+            {
+                return;
+            }
+            Logic.ExportCategory(category);
         }
 
         private void ImportCategory(object sender, EventArgs e)
         {
-            Lock();
             Logic.ImportLesson();
-            Unlock();
+            ReloadList();
         }
 
         private void CreateNewLesson(object sender, EventArgs e)
         {
-            Lock();
             Logic.CreateNewLesson();
-            Unlock();
+            ReloadList();
         }
 
         private void Save(object sender, EventArgs e)
         {
-            Lock();
             Logic.SaveAll();
-            Unlock();
+        }
+
+        private void Categorieslist_DoubleClick(object sender, EventArgs e)
+        {
+            var category = getSelection();
+            if (category is null)
+            {
+                return;
+            }
+            var view = new LessonView(category, Logic);
+            view.ShowDialog();
         }
     }
 }
